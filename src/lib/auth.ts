@@ -9,9 +9,7 @@ import bcrypt from "bcryptjs"
 import type { AppSession } from "@/types"
 
 export const authOptions: NextAuthOptions = {
-  // NOTE: No adapter — CredentialsProvider + PrismaAdapter conflict in NextAuth v4.
-  // The adapter is only needed for OAuth/magic-link flows.
-  // For credentials login, we handle everything in authorize() + JWT callbacks.
+  debug: true,
 
   providers: [
     CredentialsProvider({
@@ -22,16 +20,28 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         try {
-          if (!credentials?.email || !credentials?.password) return null
+          console.log("[Auth] authorize called with email:", credentials?.email)
+
+          if (!credentials?.email || !credentials?.password) {
+            console.log("[Auth] Missing email or password")
+            return null
+          }
 
           const user = await db.user.findUnique({
             where: { email: credentials.email },
             include: { business: true },
           })
 
-          if (!user || !user.password) return null
+          console.log("[Auth] User found:", !!user, "Has password:", !!user?.password)
+
+          if (!user || !user.password) {
+            console.log("[Auth] User not found or no password")
+            return null
+          }
 
           const isValid = await bcrypt.compare(credentials.password, user.password)
+          console.log("[Auth] Password valid:", isValid)
+
           if (!isValid) return null
 
           return {
