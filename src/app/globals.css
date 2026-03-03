@@ -22,9 +22,14 @@
     @apply bg-gray-950 text-gray-100;
   }
 
-  /* Scrollbar */
   ::-webkit-scrollbar { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { @apply bg-gray-700 rounded-full; }
   ::-webkit-scrollbar-thumb:hover { @apply bg-gray-600; }
+}
+
+@layer components {
+  .text-gradient-cyan {
+    @apply bg-gradient-to-r from-[#00e5ff] to-[#00b8d4] bg-clip-text text-transparent;
+  }
 }

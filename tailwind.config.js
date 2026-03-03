@@ -9,12 +9,19 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Brand color: emerald
         brand: {
           50: "#ecfdf5",
           400: "#34d399",
           500: "#10b981",
           600: "#059669",
+        },
+        landing: {
+          cyan: "#00e5ff",
+          orange: "#ff6b00",
+          bg: "#0a0a0a",
+          muted: "#a0a0a0",
+          card: "#111111",
+          border: "#1a1a1a",
         },
       },
       fontFamily: {
