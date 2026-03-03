@@ -7,7 +7,7 @@ import GoogleProvider from "next-auth/providers/google"
 import CredentialsProvider from "next-auth/providers/credentials"
 import { PrismaAdapter } from "@auth/prisma-adapter"
 import { db } from "./db"
-import bcrypt from "bcryptjs"
+import * as bcrypt from "bcryptjs"
 import type { AppSession } from "@/types"
 
 export const authOptions: NextAuthOptions = {
@@ -25,28 +25,40 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null
+        try {
+          if (!credentials?.email || !credentials?.password) return null
 
-        const user = await db.user.findUnique({
-          where: { email: credentials.email },
-          include: { business: true },
-        })
+          const user = await db.user.findUnique({
+            where: { email: credentials.email },
+            include: { business: true },
+          })
 
-        if (!user || !user.password) return null
+          if (!user || !user.password) {
+            console.log("[Auth] User not found or no password:", credentials.email)
+            return null
+          }
 
-        const isValid = await bcrypt.compare(credentials.password, user.password)
-        if (!isValid) return null
+          const isValid = await bcrypt.compare(credentials.password, user.password)
+          if (!isValid) {
+            console.log("[Auth] Invalid password for:", credentials.email)
+            return null
+          }
 
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image,
-          role: user.role,
-          businessId: user.businessId,
-          businessName: user.business.name,
-          businessSlug: user.business.slug,
-          plan: user.business.plan,
+          console.log("[Auth] Login success:", credentials.email)
+          return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            image: user.image,
+            role: user.role,
+            businessId: user.businessId,
+            businessName: user.business.name,
+            businessSlug: user.business.slug,
+            plan: user.business.plan,
+          }
+        } catch (err) {
+          console.error("[Auth] authorize error:", err)
+          return null
         }
       },
     }),
