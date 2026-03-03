@@ -9,8 +9,6 @@ import bcrypt from "bcryptjs"
 import type { AppSession } from "@/types"
 
 export const authOptions: NextAuthOptions = {
-  debug: true,
-
   providers: [
     CredentialsProvider({
       name: "credentials",
@@ -20,28 +18,16 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         try {
-          console.log("[Auth] authorize called with email:", credentials?.email)
-
-          if (!credentials?.email || !credentials?.password) {
-            console.log("[Auth] Missing email or password")
-            return null
-          }
+          if (!credentials?.email || !credentials?.password) return null
 
           const user = await db.user.findUnique({
             where: { email: credentials.email },
             include: { business: true },
           })
 
-          console.log("[Auth] User found:", !!user, "Has password:", !!user?.password)
-
-          if (!user || !user.password) {
-            console.log("[Auth] User not found or no password")
-            return null
-          }
+          if (!user || !user.password) return null
 
           const isValid = await bcrypt.compare(credentials.password, user.password)
-          console.log("[Auth] Password valid:", isValid)
-
           if (!isValid) return null
 
           return {
