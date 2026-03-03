@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Send, MessageCircle, Loader2, CheckCircle2 } from "lucide-react"
 import { SectionWrapper } from "./SectionWrapper"
-import { N8N_WEBHOOK_URL, WHATSAPP_NUMBER } from "@/lib/landing-constants"
+import { WHATSAPP_NUMBER } from "@/lib/landing-constants"
 
 const BIZ_OPTIONS = [
   "Salon / Spa", "Barbershop", "Contractor / Trades",
@@ -25,13 +25,12 @@ export function FinalCTA() {
     setFormState("submitting")
 
     try {
-      if (N8N_WEBHOOK_URL) {
-        await fetch(N8N_WEBHOOK_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, businessType: bizType, phone, source: "landing", timestamp: new Date().toISOString() }),
-        })
-      }
+      const res = await fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, businessType: bizType, phone }),
+      })
+      if (!res.ok) throw new Error()
       setFormState("success")
     } catch {
       setFormState("success") // still show success — we have WhatsApp fallback

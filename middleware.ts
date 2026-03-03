@@ -34,9 +34,10 @@ export default withAuth(
         // Public routes
         if (pathname === "/" || pathname.startsWith("/login")) return true
 
-        // Webhook routes — verified in route handler
+        // Public API routes
         if (pathname.startsWith("/api/webhooks")) return true
         if (pathname.startsWith("/api/agent")) return true
+        if (pathname.startsWith("/api/leads")) return true
 
         // Everything else requires a session
         return !!token

@@ -335,3 +335,26 @@ enum StopStatus {
   COMPLETED
   SKIPPED
 }
+
+// ─── LEADS (Landing Page Submissions) ─────────────────────────────────────────
+
+model Lead {
+  id           String   @id @default(cuid())
+  name         String
+  phone        String
+  businessType String
+  source       String   @default("landing")
+  status       LeadStatus @default(NEW)
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  BOOKED
+  CLOSED
+}
