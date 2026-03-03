@@ -2,34 +2,47 @@
 // app/(auth)/login/page.tsx
 
 import { signIn, useSession } from "next-auth/react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
-import { Zap, Mail, Chrome, Loader2 } from "lucide-react"
+import { Zap, LogIn, Loader2, AlertCircle } from "lucide-react"
 
 export default function LoginPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState("")
-  const [emailSent, setEmailSent] = useState(false)
-  const [loading, setLoading] = useState<"google" | "email" | null>(null)
+  const [password, setPassword] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
 
   // Redirect if already logged in
   useEffect(() => {
     if (session) router.push("/dashboard")
   }, [session, router])
 
-  async function handleGoogle() {
-    setLoading("google")
-    await signIn("google", { callbackUrl: "/dashboard" })
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault()
+    if (!email || !password) return
+    setLoading(true)
+    setError("")
+
+    const result = await signIn("credentials", {
+      email,
+      password,
+      redirect: false,
+    })
+
+    if (result?.error) {
+      setError("Invalid email or password")
+      setLoading(false)
+    } else {
+      router.push("/dashboard")
+    }
   }
 
-  async function handleEmail(e: React.FormEvent) {
-    e.preventDefault()
-    if (!email) return
-    setLoading("email")
-    await signIn("email", { email, redirect: false, callbackUrl: "/dashboard" })
-    setEmailSent(true)
-    setLoading(null)
+  function fillDemo() {
+    setEmail("demo@routeready.app")
+    setPassword("demo123")
   }
 
   if (status === "loading") {
@@ -49,69 +62,70 @@ export default function LoginPage() {
             <Zap className="w-6 h-6 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-white">RouteReady</h1>
-          <p className="text-gray-500 text-sm mt-1">Sign in to your account</p>
+          <p className="text-gray-500 text-sm mt-1">Operations platform for small businesses</p>
         </div>
 
         <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6 space-y-4">
-          {emailSent ? (
-            <div className="text-center py-4">
-              <div className="w-12 h-12 bg-emerald-500/15 rounded-full flex items-center justify-center mx-auto mb-3">
-                <Mail className="w-6 h-6 text-emerald-400" />
-              </div>
-              <p className="text-white font-medium">Check your email</p>
-              <p className="text-gray-400 text-sm mt-1">We sent a sign-in link to <strong>{email}</strong></p>
+          {error && (
+            <div className="flex items-center gap-2 text-red-400 text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              {error}
             </div>
-          ) : (
-            <>
-              {/* Google */}
-              <button
-                onClick={handleGoogle}
-                disabled={!!loading}
-                className="w-full flex items-center justify-center gap-3 bg-white text-gray-900 font-medium py-2.5 px-4 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
-              >
-                {loading === "google" ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Chrome className="w-4 h-4" />
-                )}
-                Continue with Google
-              </button>
-
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-px bg-gray-800" />
-                <span className="text-xs text-gray-600">or</span>
-                <div className="flex-1 h-px bg-gray-800" />
-              </div>
-
-              {/* Email magic link */}
-              <form onSubmit={handleEmail} className="space-y-3">
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="your@email.com"
-                  required
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm placeholder:text-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                />
-                <button
-                  type="submit"
-                  disabled={!!loading || !email}
-                  className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2.5 px-4 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {loading === "email" ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Mail className="w-4 h-4" />
-                  )}
-                  Send magic link
-                </button>
-              </form>
-            </>
           )}
+
+          <form onSubmit={handleLogin} className="space-y-3">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1.5">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="your@email.com"
+                required
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm placeholder:text-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1.5">Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Enter password"
+                required
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm placeholder:text-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading || !email || !password}
+              className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2.5 px-4 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <LogIn className="w-4 h-4" />
+              )}
+              Sign in
+            </button>
+          </form>
+
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px bg-gray-800" />
+            <span className="text-xs text-gray-600">demo</span>
+            <div className="flex-1 h-px bg-gray-800" />
+          </div>
+
+          <button
+            onClick={fillDemo}
+            className="w-full text-sm text-gray-400 hover:text-emerald-400 py-2 rounded-lg border border-gray-800 hover:border-emerald-500/30 transition-all"
+          >
+            Use demo account
+          </button>
         </div>
 
         <p className="text-center text-xs text-gray-600 mt-6">
-          RouteReady · Food Distribution Operations
+          RouteReady · Small Business Operations
         </p>
       </div>
     </div>

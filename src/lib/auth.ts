@@ -4,30 +4,51 @@
 
 import { NextAuthOptions, getServerSession } from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
-import EmailProvider from "next-auth/providers/email"
+import CredentialsProvider from "next-auth/providers/credentials"
 import { PrismaAdapter } from "@auth/prisma-adapter"
 import { db } from "./db"
+import bcrypt from "bcryptjs"
 import type { AppSession } from "@/types"
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(db) as any,
-  
+
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      clientId: process.env.GOOGLE_CLIENT_ID || "unused",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "unused",
     }),
-    // Magic link email — great for small business owners
-    EmailProvider({
-      server: {
-        host: "smtp.resend.com",
-        port: 465,
-        auth: {
-          user: "resend",
-          pass: process.env.RESEND_API_KEY,
-        },
+    CredentialsProvider({
+      name: "credentials",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
       },
-      from: process.env.EMAIL_FROM,
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) return null
+
+        const user = await db.user.findUnique({
+          where: { email: credentials.email },
+          include: { business: true },
+        })
+
+        if (!user || !user.password) return null
+
+        const isValid = await bcrypt.compare(credentials.password, user.password)
+        if (!isValid) return null
+
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          role: user.role,
+          businessId: user.businessId,
+          businessName: user.business.name,
+          businessSlug: user.business.slug,
+          plan: user.business.plan,
+        }
+      },
     }),
   ],
 
@@ -40,18 +61,28 @@ export const authOptions: NextAuthOptions = {
     // Runs when JWT is created/updated
     async jwt({ token, user }) {
       if (user) {
-        // First sign in — fetch full user+business from DB
-        const dbUser = await db.user.findUnique({
-          where: { id: user.id },
-          include: { business: true },
-        })
-        if (dbUser) {
-          token.userId = dbUser.id
-          token.role = dbUser.role
-          token.businessId = dbUser.businessId
-          token.businessName = dbUser.business.name
-          token.businessSlug = dbUser.business.slug
-          token.plan = dbUser.business.plan
+        // Credentials provider already includes these fields
+        if ((user as any).businessId) {
+          token.userId = user.id
+          token.role = (user as any).role
+          token.businessId = (user as any).businessId
+          token.businessName = (user as any).businessName
+          token.businessSlug = (user as any).businessSlug
+          token.plan = (user as any).plan
+        } else {
+          // OAuth sign-in — fetch from DB
+          const dbUser = await db.user.findUnique({
+            where: { id: user.id },
+            include: { business: true },
+          })
+          if (dbUser) {
+            token.userId = dbUser.id
+            token.role = dbUser.role
+            token.businessId = dbUser.businessId
+            token.businessName = dbUser.business.name
+            token.businessSlug = dbUser.business.slug
+            token.plan = dbUser.business.plan
+          }
         }
       }
       return token
@@ -78,13 +109,11 @@ export const authOptions: NextAuthOptions = {
 }
 
 // Helper: get session in Server Components and API routes
-// Usage: const session = await getAppSession()
 export async function getAppSession(): Promise<AppSession | null> {
   return getServerSession(authOptions) as Promise<AppSession | null>
 }
 
 // Helper: require auth — throws if not authenticated
-// Use in API routes to protect endpoints
 export async function requireAuth(): Promise<AppSession> {
   const session = await getAppSession()
   if (!session) {

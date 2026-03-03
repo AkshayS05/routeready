@@ -1,10 +1,11 @@
 // prisma/seed.ts
 import { PrismaClient } from "@prisma/client"
+import bcrypt from "bcryptjs"
 
 const db = new PrismaClient()
 
 async function main() {
-  console.log("🌱 Seeding RouteReady database...")
+  console.log("Seeding RouteReady database...")
 
   // Wipe existing seed data so re-running is safe
   await db.orderItem.deleteMany()
@@ -31,7 +32,21 @@ async function main() {
       plan: "PRO",
     },
   })
-  console.log(`✅ Business: ${business.name}`)
+  console.log(`Business: ${business.name}`)
+
+  // Demo user (email: demo@routeready.app / password: demo123)
+  const hashedPassword = await bcrypt.hash("demo123", 10)
+  const demoUser = await db.user.create({
+    data: {
+      name: "Akshay Sharma",
+      email: "demo@routeready.app",
+      password: hashedPassword,
+      role: "OWNER",
+      businessId: business.id,
+      emailVerified: new Date(),
+    },
+  })
+  console.log(`Demo user: ${demoUser.email} / password: demo123`)
 
   // Drivers
   const [driver1, driver2, driver3] = await Promise.all([
@@ -39,7 +54,7 @@ async function main() {
     db.driver.create({ data: { businessId: business.id, name: "Miguel Santos", phone: "905-555-0202", vehicleType: "Box Truck", licensePlate: "MSNT 002", capacityKg: 1200 } }),
     db.driver.create({ data: { businessId: business.id, name: "Priya Mehta", phone: "905-555-0203", vehicleType: "Cargo Van", licensePlate: "PMHT 003", capacityKg: 600 } }),
   ])
-  console.log(`✅ Drivers: 3 created`)
+  console.log(`Drivers: 3 created`)
 
   // Clients
   const [client1, client2, client3, client4] = await Promise.all([
@@ -48,7 +63,7 @@ async function main() {
     db.client.create({ data: { businessId: business.id, name: "Punjab Palace Restaurant", contactName: "Gurdev Singh", phone: "905-555-0303", address: "321 Hurontario St", city: "Mississauga", lat: 43.5935, lng: -79.6398 } }),
     db.client.create({ data: { businessId: business.id, name: "Fresh Taste Catering", contactName: "Anita Sharma", phone: "905-555-0304", address: "654 Steeles Ave E", city: "Brampton", lat: 43.7189, lng: -79.7572 } }),
   ])
-  console.log(`✅ Clients: 4 created`)
+  console.log(`Clients: 4 created`)
 
   // Inventory
   const threeDays = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
@@ -59,7 +74,7 @@ async function main() {
     db.inventoryItem.create({ data: { businessId: business.id, sku: "SPICE-001", name: "Cumin 1kg", category: "Spices", unit: "bag", unitPrice: 12.99, quantity: 25, reorderThreshold: 10, expiryDate: threeDays } }),
     db.inventoryItem.create({ data: { businessId: business.id, sku: "FLOUR-001", name: "Atta Flour 20kg", category: "Grains", unit: "bag", unitPrice: 22.99, quantity: 30, reorderThreshold: 15 } }),
   ])
-  console.log(`✅ Inventory: 5 items (2 low stock, 1 expiring soon)`)
+  console.log(`Inventory: 5 items (2 low stock, 1 expiring soon)`)
 
   // Orders
   const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000)
@@ -72,23 +87,22 @@ async function main() {
     db.order.create({ data: { orderNumber: "ORD-2024-0003", businessId: business.id, clientId: client3.id, status: "PENDING", priority: "NORMAL", scheduledDate: dayAfter, deliveryAddress: client3.address, subtotal: 159.92, tax: 20.79, total: 180.71, items: { create: [{ inventoryId: flour.id, name: "Atta Flour 20kg", sku: "FLOUR-001", quantity: 4, unit: "bag", unitPrice: 22.99, totalPrice: 91.96 }, { inventoryId: lentils.id, name: "Red Lentils 10kg", sku: "LENT-001", quantity: 2, unit: "bag", unitPrice: 19.99, totalPrice: 39.98 }] } } }),
     db.order.create({ data: { orderNumber: "ORD-2024-0004", businessId: business.id, clientId: client4.id, driverId: driver3.id, status: "DELIVERED", priority: "NORMAL", scheduledDate: yesterday, deliveredAt: new Date(Date.now() - 20 * 60 * 60 * 1000), deliveryAddress: client4.address, subtotal: 77.97, tax: 10.14, total: 88.11, items: { create: [{ inventoryId: cumin.id, name: "Cumin 1kg", sku: "SPICE-001", quantity: 6, unit: "bag", unitPrice: 12.99, totalPrice: 77.97 }] } } }),
   ])
-  console.log(`✅ Orders: 4 created (delivered, in-transit, assigned, pending)`)
+  console.log(`Orders: 4 created (delivered, in-transit, assigned, pending)`)
 
   console.log(`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎉 Seed complete!
+Seed complete!
 
 Business:  Patel Foods Distribution
+Demo Login: demo@routeready.app / demo123
 Drivers:   Harpreet Singh, Miguel Santos, Priya Mehta
 Clients:   4 GTA businesses
 Inventory: 5 items (OIL + LENTILS below threshold)
 Orders:    4 across all statuses
-
-Run: npm run dev → http://localhost:3000
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   `)
 }
 
 main()
-  .catch((e) => { console.error("❌ Seed failed:", e); process.exit(1) })
+  .catch((e) => { console.error("Seed failed:", e); process.exit(1) })
   .finally(() => db.$disconnect())
