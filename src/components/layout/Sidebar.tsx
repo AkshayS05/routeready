@@ -15,6 +15,7 @@ import {
   LogOut,
   ChevronRight,
   Zap,
+  Bot,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -25,6 +26,7 @@ const navItems = [
   { href: "/dashboard/clients", label: "Clients", icon: Users },
   { href: "/dashboard/routes", label: "Routes", icon: Route },
   { href: "/dashboard/inventory", label: "Inventory", icon: Package },
+  { href: "/dashboard/agent", label: "AI Agent", icon: Bot },
 ]
 
 export function Sidebar() {
