@@ -1,0 +1,336 @@
+// RouteReady - Prisma Schema
+// Multi-tenant food distribution operations platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── TENANT (Business) ───────────────────────────────────────────────────────
+// Every entity MUST have businessId. This is non-negotiable for multi-tenancy.
+
+model Business {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique // used in URLs
+  phone     String?
+  address   String?
+  city      String?
+  province  String   @default("ON")
+  timezone  String   @default("America/Toronto")
+  plan      Plan     @default(STARTER)
+  settings  Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  users     User[]
+  clients   Client[]
+  drivers   Driver[]
+  orders    Order[]
+  inventory InventoryItem[]
+  routes    Route[]
+
+  @@index([slug])
+}
+
+enum Plan {
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
+// ─── USER & AUTH ─────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  role          UserRole  @default(STAFF)
+  businessId    String
+  business      Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // NextAuth
+  accounts Account[]
+  sessions Session[]
+
+  @@index([businessId])
+  @@index([email])
+}
+
+enum UserRole {
+  OWNER
+  MANAGER
+  STAFF
+  DRIVER
+}
+
+// NextAuth required models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── CLIENT (Customer) ───────────────────────────────────────────────────────
+
+model Client {
+  id         String  @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  name       String
+  contactName String?
+  phone      String?
+  email      String?
+  address    String
+  city       String
+  postalCode String?
+  lat        Float?  // for route optimization
+  lng        Float?
+  notes      String?
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  orders     Order[]
+
+  @@index([businessId])
+  @@index([businessId, active])
+}
+
+// ─── DRIVER ──────────────────────────────────────────────────────────────────
+
+model Driver {
+  id           String   @id @default(cuid())
+  businessId   String
+  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  name         String
+  phone        String
+  email        String?
+  vehicleType  String?
+  licensePlate String?
+  capacityKg   Float    @default(500) // max load per route
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  orders       Order[]
+  routes       Route[]
+
+  @@index([businessId])
+  @@index([businessId, active])
+}
+
+// ─── ORDER ───────────────────────────────────────────────────────────────────
+
+model Order {
+  id           String      @id @default(cuid())
+  orderNumber  String      // human-readable: ORD-2024-001
+  businessId   String
+  business     Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  clientId     String
+  client       Client      @relation(fields: [clientId], references: [id])
+  driverId     String?
+  driver       Driver?     @relation(fields: [driverId], references: [id])
+  routeId      String?
+  route        Route?      @relation(fields: [routeId], references: [id])
+
+  status       OrderStatus @default(PENDING)
+  priority     Priority    @default(NORMAL)
+
+  scheduledDate DateTime
+  deliveredAt   DateTime?
+
+  deliveryAddress String?  // override client address if needed
+  deliveryNotes   String?
+  internalNotes   String?
+
+  proofOfDelivery String?  // Supabase storage URL
+  signedBy        String?
+
+  subtotal     Float       @default(0)
+  tax          Float       @default(0)
+  total        Float       @default(0)
+  invoiceSent  Boolean     @default(false)
+  invoiceUrl   String?
+
+  items        OrderItem[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([businessId])
+  @@index([businessId, status])
+  @@index([businessId, scheduledDate])
+  @@index([businessId, driverId])
+  @@index([orderNumber])
+}
+
+enum OrderStatus {
+  PENDING       // created, not assigned
+  ASSIGNED      // driver assigned, not yet picked up
+  IN_TRANSIT    // driver picked up, en route
+  DELIVERED     // completed successfully
+  FAILED        // attempted, could not deliver
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model OrderItem {
+  id            String        @id @default(cuid())
+  orderId       String
+  order         Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  inventoryId   String?
+  inventory     InventoryItem? @relation(fields: [inventoryId], references: [id])
+
+  name          String        // snapshot of product name
+  sku           String?
+  quantity      Float
+  unit          String        @default("unit")
+  unitPrice     Float
+  totalPrice    Float
+
+  @@index([orderId])
+}
+
+// ─── INVENTORY ───────────────────────────────────────────────────────────────
+
+model InventoryItem {
+  id               String   @id @default(cuid())
+  businessId       String
+  business         Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  sku              String
+  name             String
+  category         String?
+  description      String?
+  unit             String   @default("unit") // kg, case, unit, pallet
+  unitPrice        Float    @default(0)
+
+  quantity         Float    @default(0)
+  reorderThreshold Float    @default(10)
+  reorderQty       Float    @default(50) // suggested reorder amount
+
+  expiryDate       DateTime?
+  lotNumber        String?
+  supplier         String?
+
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  orderItems       OrderItem[]
+
+  @@unique([businessId, sku])   // SKU unique per business
+  @@index([businessId])
+  @@index([businessId, category])
+  @@index([businessId, quantity]) // for low-stock queries
+}
+
+// ─── ROUTE ───────────────────────────────────────────────────────────────────
+
+model Route {
+  id           String      @id @default(cuid())
+  businessId   String
+  business     Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  driverId     String
+  driver       Driver      @relation(fields: [driverId], references: [id])
+
+  date         DateTime
+  status       RouteStatus @default(DRAFT)
+  optimized    Boolean     @default(false)
+
+  // Stats (computed and stored)
+  totalStops        Int     @default(0)
+  totalDistanceKm   Float?
+  estimatedMins     Int?
+  actualMins        Int?
+
+  notes        String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  orders       Order[]
+  stops        RouteStop[]
+
+  @@index([businessId])
+  @@index([businessId, date])
+  @@index([businessId, driverId])
+}
+
+enum RouteStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+model RouteStop {
+  id        String  @id @default(cuid())
+  routeId   String
+  route     Route   @relation(fields: [routeId], references: [id], onDelete: Cascade)
+
+  position  Int     // stop order in route (0-indexed)
+  address   String
+  lat       Float?
+  lng       Float?
+  notes     String?
+
+  arrivalTime   DateTime?
+  completedAt   DateTime?
+  status        StopStatus @default(PENDING)
+
+  @@index([routeId])
+  @@unique([routeId, position])
+}
+
+enum StopStatus {
+  PENDING
+  ARRIVED
+  COMPLETED
+  SKIPPED
+}
