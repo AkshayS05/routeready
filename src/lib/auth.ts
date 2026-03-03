@@ -1,23 +1,19 @@
 // lib/auth.ts
 // NextAuth v4 configuration
-// Using Prisma adapter so sessions/accounts are stored in our DB
+// Using JWT strategy with credentials login (no adapter needed for demo)
 
 import { NextAuthOptions, getServerSession } from "next-auth"
-import GoogleProvider from "next-auth/providers/google"
 import CredentialsProvider from "next-auth/providers/credentials"
-import { PrismaAdapter } from "@auth/prisma-adapter"
 import { db } from "./db"
 import bcrypt from "bcryptjs"
 import type { AppSession } from "@/types"
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(db) as any,
+  // NOTE: No adapter — CredentialsProvider + PrismaAdapter conflict in NextAuth v4.
+  // The adapter is only needed for OAuth/magic-link flows.
+  // For credentials login, we handle everything in authorize() + JWT callbacks.
 
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || "unused",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "unused",
-    }),
     CredentialsProvider({
       name: "credentials",
       credentials: {
@@ -33,18 +29,11 @@ export const authOptions: NextAuthOptions = {
             include: { business: true },
           })
 
-          if (!user || !user.password) {
-            console.log("[Auth] User not found or no password:", credentials.email)
-            return null
-          }
+          if (!user || !user.password) return null
 
           const isValid = await bcrypt.compare(credentials.password, user.password)
-          if (!isValid) {
-            console.log("[Auth] Invalid password for:", credentials.email)
-            return null
-          }
+          if (!isValid) return null
 
-          console.log("[Auth] Login success:", credentials.email)
           return {
             id: user.id,
             name: user.name,
@@ -55,7 +44,7 @@ export const authOptions: NextAuthOptions = {
             businessName: user.business.name,
             businessSlug: user.business.slug,
             plan: user.business.plan,
-          }
+          } as any
         } catch (err) {
           console.error("[Auth] authorize error:", err)
           return null
@@ -65,42 +54,23 @@ export const authOptions: NextAuthOptions = {
   ],
 
   session: {
-    strategy: "jwt", // JWT faster than DB sessions for most requests
+    strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
 
   callbacks: {
-    // Runs when JWT is created/updated
     async jwt({ token, user }) {
       if (user) {
-        // Credentials provider already includes these fields
-        if ((user as any).businessId) {
-          token.userId = user.id
-          token.role = (user as any).role
-          token.businessId = (user as any).businessId
-          token.businessName = (user as any).businessName
-          token.businessSlug = (user as any).businessSlug
-          token.plan = (user as any).plan
-        } else {
-          // OAuth sign-in — fetch from DB
-          const dbUser = await db.user.findUnique({
-            where: { id: user.id },
-            include: { business: true },
-          })
-          if (dbUser) {
-            token.userId = dbUser.id
-            token.role = dbUser.role
-            token.businessId = dbUser.businessId
-            token.businessName = dbUser.business.name
-            token.businessSlug = dbUser.business.slug
-            token.plan = dbUser.business.plan
-          }
-        }
+        token.userId = user.id
+        token.role = (user as any).role
+        token.businessId = (user as any).businessId
+        token.businessName = (user as any).businessName
+        token.businessSlug = (user as any).businessSlug
+        token.plan = (user as any).plan
       }
       return token
     },
 
-    // Runs on every request — shapes the session object the app uses
     async session({ session, token }) {
       if (token) {
         session.user.id = token.userId as string
@@ -120,12 +90,10 @@ export const authOptions: NextAuthOptions = {
   },
 }
 
-// Helper: get session in Server Components and API routes
 export async function getAppSession(): Promise<AppSession | null> {
   return getServerSession(authOptions) as Promise<AppSession | null>
 }
 
-// Helper: require auth — throws if not authenticated
 export async function requireAuth(): Promise<AppSession> {
   const session = await getAppSession()
   if (!session) {
